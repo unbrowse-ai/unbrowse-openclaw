@@ -1,0 +1,17 @@
+{
+  plugins: {
+    allow: ["unbrowse-openclaw"],
+    load: { paths: ["/absolute/path/to/unbrowse-openclaw"] },
+    entries: {
+      "unbrowse-openclaw": {
+        enabled: true,
+        config: {
+          routingMode: "fallback",
+          preferInBootstrap: true,
+          allowBrowserFallback: true,
+          timeoutMs: 120000
+        }
+      }
+    }
+  }
+}
