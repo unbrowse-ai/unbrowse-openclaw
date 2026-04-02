@@ -11,11 +11,11 @@
   "author": "Lewis <https://github.com/lekt9>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/lekt9/unbrowse-openclaw.git"
+    "url": "git+https://github.com/unbrowse-ai/unbrowse-openclaw.git"
   },
-  "homepage": "https://github.com/lekt9/unbrowse-openclaw#readme",
+  "homepage": "https://github.com/unbrowse-ai/unbrowse-openclaw#readme",
   "bugs": {
-    "url": "https://github.com/lekt9/unbrowse-openclaw/issues"
+    "url": "https://github.com/unbrowse-ai/unbrowse-openclaw/issues"
   },
   "keywords": [
     "openclaw",
