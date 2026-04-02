@@ -2,7 +2,7 @@ import { Type } from "@sinclair/typebox";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { createRequire } from "node:module";
 import { spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 const requireFromHere = createRequire(import.meta.url);
@@ -84,16 +84,28 @@ function normalizeConfig(raw: unknown): Required<PluginConfig> {
 function resolveUnbrowseBin(config: Required<PluginConfig>): string {
   if (config.binPath) return config.binPath;
   const pkgJson = requireFromHere.resolve("unbrowse/package.json");
-  const pkg = JSON.parse(readFileSync(pkgJson, "utf8")) as {
-    bin?: string | Record<string, string>;
-  };
-  const binEntry =
+  const pkg = JSON.parse(readFileSync(pkgJson, "utf8")) as { bin?: string | Record<string, string> };
+  const packageRoot = dirname(pkgJson);
+  const declaredBin =
     typeof pkg.bin === "string"
       ? pkg.bin
       : typeof pkg.bin?.unbrowse === "string"
         ? pkg.bin.unbrowse
-        : "dist/cli.js";
-  return join(dirname(pkgJson), binEntry);
+        : "";
+
+  const candidates = [
+    declaredBin,
+    "bin/unbrowse-wrapper.mjs",
+    "bin/unbrowse.js",
+    "dist/cli.js",
+  ].filter((value): value is string => Boolean(value));
+
+  for (const candidate of candidates) {
+    const resolved = join(packageRoot, candidate);
+    if (existsSync(resolved)) return resolved;
+  }
+
+  throw new Error(`Unable to resolve Unbrowse CLI from ${pkgJson}`);
 }
 
 function pushFlag(args: string[], name: string, value: string | number | boolean | undefined): void {
@@ -313,6 +325,7 @@ export const __test = {
   buildTrustedInstallGuide,
   normalizeConfig,
   resolveUnbrowseBin,
+  runCommand,
 };
 
 const plugin = {
