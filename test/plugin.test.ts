@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 
 test("exports plugin metadata", async () => {
   const mod = await import("../index.ts");
@@ -105,5 +109,127 @@ test("package exposes the npm installer bin", () => {
   ) as { bin?: Record<string, string>; dependencies?: Record<string, string> };
 
   assert.equal(pkg.bin?.["unbrowse-openclaw"], "./bin/unbrowse-openclaw.mjs");
-  assert.equal(pkg.dependencies?.unbrowse, "^1.1.5");
+  assert.equal(pkg.dependencies?.unbrowse, "^2.10.2");
+  assert.equal(pkg.dependencies?.bs58, "^6.0.0");
+  assert.equal(pkg.dependencies?.["@solana/kit"], "^6.6.0");
+  assert.equal(pkg.dependencies?.["@cascade-fyi/splits-sdk"], "^0.11.1");
+});
+
+test("npm pack tarball keeps the installer entrypoints and runtime deps", () => {
+  const packageDir = fileURLToPath(new URL("..", import.meta.url));
+  const packDir = mkdtempSync(join(tmpdir(), "unbrowse-openclaw-pack-"));
+  const extractDir = mkdtempSync(join(tmpdir(), "unbrowse-openclaw-tar-"));
+
+  try {
+    const pack = spawnSync("npm", ["pack", "--json", "--pack-destination", packDir], {
+      cwd: packageDir,
+      encoding: "utf8",
+    });
+
+    assert.equal(pack.status, 0, pack.stderr || pack.stdout);
+
+    const [tarball] = JSON.parse(pack.stdout) as Array<{
+      filename: string;
+      files: Array<{ path: string }>;
+    }>;
+
+    assert.ok(tarball);
+    assert.ok(tarball.files.some((entry) => entry.path === "bin/unbrowse-openclaw.mjs"));
+    assert.ok(tarball.files.some((entry) => entry.path === "scripts/install-openclaw.sh"));
+
+    const unpack = spawnSync("tar", ["-xzf", join(packDir, tarball.filename), "-C", extractDir], {
+      encoding: "utf8",
+    });
+
+    assert.equal(unpack.status, 0, unpack.stderr || unpack.stdout);
+
+    const packedPkg = JSON.parse(readFileSync(join(extractDir, "package", "package.json"), "utf8")) as {
+      bin?: Record<string, string>;
+      files?: string[];
+      dependencies?: Record<string, string>;
+    };
+
+    assert.equal(packedPkg.bin?.["unbrowse-openclaw"], "./bin/unbrowse-openclaw.mjs");
+    assert.ok(packedPkg.files?.includes("bin"));
+    assert.ok(packedPkg.files?.includes("scripts"));
+    assert.equal(packedPkg.dependencies?.unbrowse, "^2.10.2");
+    assert.equal(packedPkg.dependencies?.bs58, "^6.0.0");
+    assert.equal(packedPkg.dependencies?.["@solana/kit"], "^6.6.0");
+    assert.equal(packedPkg.dependencies?.["@cascade-fyi/splits-sdk"], "^0.11.1");
+  } finally {
+    rmSync(packDir, { force: true, recursive: true });
+    rmSync(extractDir, { force: true, recursive: true });
+  }
+});
+
+test("resolveUnbrowseBin follows the installed package bin entry", async () => {
+  const mod = await import("../index.ts");
+  const unbrowsePkgPath = new URL("../node_modules/unbrowse/package.json", import.meta.url);
+  const unbrowsePkg = JSON.parse(readFileSync(unbrowsePkgPath, "utf8")) as { bin?: string | Record<string, string> };
+  const declaredBin =
+    typeof unbrowsePkg.bin === "string"
+      ? unbrowsePkg.bin
+      : unbrowsePkg.bin?.unbrowse;
+
+  assert.equal(typeof declaredBin, "string");
+  assert.equal(
+    mod.__test.resolveUnbrowseBin(mod.__test.normalizeConfig({})),
+    new URL(`../node_modules/unbrowse/${declaredBin}`, import.meta.url).pathname,
+  );
+});
+
+test("plugin tool executes against an explicit binPath", async () => {
+  const mod = await import("../index.ts");
+  const tools: Array<{ execute: (toolCallId: string, params: Record<string, unknown>) => Promise<unknown> }> = [];
+  const hooks: unknown[] = [];
+  const services: unknown[] = [];
+  const scriptDir = mkdtempSync(join(tmpdir(), "unbrowse-openclaw-bin-"));
+  const fakeCliPath = join(scriptDir, "fake-unbrowse.mjs");
+
+  writeFileSync(
+    fakeCliPath,
+    [
+      "#!/usr/bin/env node",
+      "const action = process.argv[2] ?? 'unknown';",
+      "process.stdout.write(JSON.stringify({ message: `fake ${action} ok`, args: process.argv.slice(2) }));",
+    ].join("\n"),
+  );
+  chmodSync(fakeCliPath, 0o755);
+
+  const api = {
+    pluginConfig: { routingMode: "strict", healthcheckOnStart: false, binPath: fakeCliPath },
+    logger: { info() {}, warn() {} },
+    registerTool(tool: { execute: (toolCallId: string, params: Record<string, unknown>) => Promise<unknown> }) {
+      tools.push(tool);
+    },
+    registerHook(...args: unknown[]) {
+      hooks.push(args);
+    },
+    registerCli(fn: ({ program }: { program: { command: () => unknown } }) => void) {
+      const chain = {
+        description() { return chain; },
+        argument() { return chain; },
+        action() { return chain; },
+        command() { return chain; },
+      };
+      fn({ program: { command: () => chain } });
+    },
+    registerService(service: unknown) {
+      services.push(service);
+    },
+  };
+
+  mod.default.register(api as never);
+  assert.equal(tools.length, 1);
+  assert.equal(hooks.length, 3);
+  assert.equal(services.length, 1);
+
+  const result = await tools[0].execute("tool-call", { action: "health" }) as {
+    details?: { ok?: boolean; result?: { args?: string[] } };
+    content?: Array<{ text?: string }>;
+  };
+
+  assert.equal(result.details?.ok, true);
+  assert.deepEqual(result.details?.result?.args, ["health"]);
+  assert.match(result.content?.[0]?.text ?? "", /fake health ok/);
 });

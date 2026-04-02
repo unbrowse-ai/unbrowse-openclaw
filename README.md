@@ -27,14 +27,15 @@ bun run openclaw:install -- --restart
 
 What the installer does:
 
-- links the local plugin into OpenClaw
+- copies or links the plugin into OpenClaw's managed extensions dir
+- rewrites `plugins.load.paths` so this plugin resolves to the managed install, not a stale checkout
 - merges `plugins.allow` with `unbrowse-openclaw`
 - enables the plugin entry
 - writes sticky plugin config with `routingMode`, `preferInBootstrap`, and timeout
 - unsets global `tools.profile` unless you pass `--keep-tools-profile`
 - optionally restarts the gateway
 
-Why the script exists: `openclaw plugins install` alone is not enough. It does not set `plugins.allow`, does not switch the plugin into strict mode, and does not remove the `tools.profile` footgun that can hide plugin tools completely.
+Why the script exists: `openclaw plugins install` alone is not enough. On current OpenClaw builds it also hard-blocks this plugin because the runtime legitimately uses `child_process` to launch the local `unbrowse` CLI. The installer avoids that path, writes the managed install directly, sets `plugins.allow`, switches strict/fallback mode, and removes the `tools.profile` footgun that can hide plugin tools completely.
 
 Installer flags:
 
