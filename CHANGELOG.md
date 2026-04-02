@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- fix npm release packaging so published tarballs keep `bin/` + `scripts/`, restoring `npx unbrowse-openclaw install --restart`
+- bypass OpenClaw's `plugins install` dangerous-code block by writing the managed extension install + config directly
+- add tarball regression coverage for package metadata, shipped files, and runtime dependencies before publish
 - add a package bin so the published npm package installs with `npx unbrowse-openclaw install` instead of requiring a repo checkout
 - add `scripts/install-openclaw.sh` so install is one command instead of a plugin install plus manual config surgery
 - clean out the stale monorepo-era files so this repo is just the standalone OpenClaw plugin package
