@@ -1,20 +1,70 @@
 {
-  "name": "unbrowse-monorepo",
-  "private": true,
-  "workspaces": [
-    "packages/*"
-  ],
-  "scripts": {
-    "test": "bun test packages/plugin/test/*.test.ts",
-    "test:e2e": "E2E_BACKEND_START=docker bun test packages/plugin/test/e2e",
-    "test:evals": "cd packages/plugin && bun test/evals/run-replay-v2-suite.ts --suite ./test/evals/replay-v2-suite.example.json",
-    "test:oct": "bash packages/plugin/scripts/test-oct.sh",
-    "clean:dist": "node ./scripts/clean-dist.mjs",
-    "build": "npm run clean:dist && cd packages/core && npx tsc && cd ../agent-browser && npx tsc && cd ../plugin && npx tsc",
-    "build:web": "cd packages/web && pnpm build",
-    "typecheck": "cd packages/core && npx tsc --noEmit && cd ../agent-browser && npx tsc --noEmit && cd ../plugin && npx tsc --noEmit"
+  "name": "unbrowse-openclaw",
+  "version": "0.7.13",
+  "description": "OpenClaw plugin that makes Unbrowse the preferred tool for website tasks.",
+  "type": "module",
+  "main": "index.ts",
+  "bin": {
+    "unbrowse-openclaw": "./bin/unbrowse-openclaw.mjs"
   },
-  "packageManager": "pnpm@9.15.5",
-  "license": "AGPL-3.0-only",
-  "description": "Open protocol for agent web access. Capture, package, and replay internal web APIs."
+  "license": "MIT",
+  "author": "Lewis <https://github.com/lekt9>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/unbrowse-ai/unbrowse-openclaw.git"
+  },
+  "homepage": "https://github.com/unbrowse-ai/unbrowse-openclaw#readme",
+  "bugs": {
+    "url": "https://github.com/unbrowse-ai/unbrowse-openclaw/issues"
+  },
+  "keywords": [
+    "openclaw",
+    "openclaw-plugin",
+    "unbrowse",
+    "browser",
+    "agent"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "install:openclaw": "bash scripts/install-openclaw.sh",
+    "test": "node --import tsx --test test/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run typecheck && npm test"
+  },
+  "dependencies": {
+    "@sinclair/typebox": "^0.34.41",
+    "unbrowse": "^1.1.5"
+  },
+  "peerDependencies": {
+    "openclaw": "^2026.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.6.1",
+    "openclaw": "^2026.3.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "files": [
+    "index.ts",
+    "openclaw.plugin.json",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "bin",
+    "scripts",
+    "prompts",
+    "skills",
+    "examples",
+    "tsconfig.json"
+  ]
 }
