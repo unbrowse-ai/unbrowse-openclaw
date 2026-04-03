@@ -125,7 +125,11 @@ PLUGIN_ID="$(
 )"
 
 oc() {
-  openclaw "${OPENCLAW_SCOPE[@]}" "$@"
+  if declare -p OPENCLAW_SCOPE >/dev/null 2>&1 && ((${#OPENCLAW_SCOPE[@]})); then
+    openclaw "${OPENCLAW_SCOPE[@]}" "$@"
+  else
+    openclaw "$@"
+  fi
 }
 
 resolve_state_dir() {
