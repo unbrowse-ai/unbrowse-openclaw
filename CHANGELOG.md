@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 0.7.15
+
+- guard the installer's default-scope `openclaw` wrapper so `npx unbrowse-openclaw install --restart` no longer dies under `set -u` with `OPENCLAW_SCOPE[@]: unbound variable`
 - fix npm release packaging so published tarballs keep `bin/` + `scripts/`, restoring `npx unbrowse-openclaw install --restart`
 - bypass OpenClaw's `plugins install` dangerous-code block by writing the managed extension install + config directly
 - add tarball regression coverage for package metadata, shipped files, and runtime dependencies before publish
