@@ -1,6 +1,6 @@
 {
   "name": "unbrowse-openclaw",
-  "version": "0.7.15",
+  "version": "0.7.16",
   "description": "OpenClaw plugin that makes Unbrowse the preferred tool for website tasks.",
   "type": "module",
   "main": "index.ts",
@@ -41,7 +41,7 @@
     "@cascade-fyi/splits-sdk": "^0.11.1",
     "@solana/kit": "^6.6.0",
     "bs58": "^6.0.0",
-    "unbrowse": "^2.10.2"
+    "unbrowse": "^3.0.0"
   },
   "peerDependencies": {
     "openclaw": "^2026.3.2"
