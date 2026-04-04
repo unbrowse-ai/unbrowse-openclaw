@@ -112,7 +112,7 @@ test("package exposes the npm installer bin", () => {
   ) as { bin?: Record<string, string>; dependencies?: Record<string, string> };
 
   assert.equal(pkg.bin?.["unbrowse-openclaw"], "./bin/unbrowse-openclaw.mjs");
-  assert.equal(pkg.dependencies?.unbrowse, "^2.10.2");
+  assert.equal(pkg.dependencies?.unbrowse, "^3.0.0");
   assert.equal(pkg.dependencies?.bs58, "^6.0.0");
   assert.equal(pkg.dependencies?.["@solana/kit"], "^6.6.0");
   assert.equal(pkg.dependencies?.["@cascade-fyi/splits-sdk"], "^0.11.1");
@@ -155,7 +155,7 @@ test("npm pack tarball keeps the installer entrypoints and runtime deps", () => 
     assert.equal(packedPkg.bin?.["unbrowse-openclaw"], "./bin/unbrowse-openclaw.mjs");
     assert.ok(packedPkg.files?.includes("bin"));
     assert.ok(packedPkg.files?.includes("scripts"));
-    assert.equal(packedPkg.dependencies?.unbrowse, "^2.10.2");
+    assert.equal(packedPkg.dependencies?.unbrowse, "^3.0.0");
     assert.equal(packedPkg.dependencies?.bs58, "^6.0.0");
     assert.equal(packedPkg.dependencies?.["@solana/kit"], "^6.6.0");
     assert.equal(packedPkg.dependencies?.["@cascade-fyi/splits-sdk"], "^0.11.1");
