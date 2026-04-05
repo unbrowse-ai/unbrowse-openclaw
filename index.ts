@@ -2,7 +2,7 @@ import { Type } from "@sinclair/typebox";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { createRequire } from "node:module";
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { accessSync, constants, existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 const requireFromHere = createRequire(import.meta.url);
@@ -83,7 +83,16 @@ function normalizeConfig(raw: unknown): Required<PluginConfig> {
 
 function resolveUnbrowseBin(config: Required<PluginConfig>): string {
   if (config.binPath) return config.binPath;
-  const pkgJson = requireFromHere.resolve("unbrowse/package.json");
+
+  let pkgJson: string;
+  try {
+    pkgJson = requireFromHere.resolve("unbrowse/package.json");
+  } catch {
+    throw new Error(
+      "Unable to find the 'unbrowse' package. Run: npm install -g unbrowse  (or reinstall the plugin with: npx unbrowse-openclaw install --restart)",
+    );
+  }
+
   const pkg = JSON.parse(readFileSync(pkgJson, "utf8")) as { bin?: string | Record<string, string> };
   const packageRoot = dirname(pkgJson);
   const declaredBin =
@@ -102,10 +111,19 @@ function resolveUnbrowseBin(config: Required<PluginConfig>): string {
 
   for (const candidate of candidates) {
     const resolved = join(packageRoot, candidate);
-    if (existsSync(resolved)) return resolved;
+    if (existsSync(resolved)) {
+      try {
+        accessSync(resolved, constants.R_OK);
+      } catch {
+        throw new Error(`Found Unbrowse CLI at ${resolved} but it is not readable. Check file permissions.`);
+      }
+      return resolved;
+    }
   }
 
-  throw new Error(`Unable to resolve Unbrowse CLI from ${pkgJson}`);
+  throw new Error(
+    `Unable to resolve Unbrowse CLI binary from ${pkgJson}. Tried: ${candidates.join(", ")}`,
+  );
 }
 
 function pushFlag(args: string[], name: string, value: string | number | boolean | undefined): void {
@@ -201,33 +219,51 @@ function registerCompatibleHook(
 
 async function runCommand(binPath: string, args: string[], config: Required<PluginConfig>): Promise<CommandResult> {
   return await new Promise<CommandResult>((resolve) => {
-    const child = spawn(process.execPath, [binPath, ...args], {
-      env: {
-        ...process.env,
-        ...(config.baseUrl ? { UNBROWSE_URL: config.baseUrl } : {}),
-      },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn(process.execPath, [binPath, ...args], {
+        env: {
+          ...process.env,
+          ...(config.baseUrl ? { UNBROWSE_URL: config.baseUrl } : {}),
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    } catch (error) {
+      resolve({
+        ok: false,
+        stdout: "",
+        stderr: `Failed to spawn unbrowse process: ${error instanceof Error ? error.message : String(error)}`,
+        exitCode: 126,
+        signal: null,
+      });
+      return;
+    }
 
+    const MAX_BUFFER = 4 * 1024 * 1024; // 4 MB
     let stdout = "";
     let stderr = "";
     let timedOut = false;
+
     const timer = setTimeout(() => {
       timedOut = true;
       child.kill("SIGTERM");
+      // Force kill if SIGTERM doesn't work within 5s
+      setTimeout(() => {
+        if (!child.killed) child.kill("SIGKILL");
+      }, 5_000);
     }, config.timeoutMs);
 
-    child.stdout.on("data", (chunk) => {
-      stdout += String(chunk);
+    child.stdout!.on("data", (chunk) => {
+      if (stdout.length < MAX_BUFFER) stdout += String(chunk);
     });
-    child.stderr.on("data", (chunk) => {
-      stderr += String(chunk);
+    child.stderr!.on("data", (chunk) => {
+      if (stderr.length < MAX_BUFFER) stderr += String(chunk);
     });
 
     child.on("close", (exitCode, signal) => {
       clearTimeout(timer);
-      if (timedOut && !signal) {
-        resolve({ ok: false, stdout, stderr: `${stderr}\nTimed out after ${config.timeoutMs}ms`.trim(), exitCode: 124, signal: null });
+      if (timedOut) {
+        resolve({ ok: false, stdout, stderr: `${stderr}\nTimed out after ${config.timeoutMs}ms`.trim(), exitCode: 124, signal: signal ?? "SIGTERM" });
         return;
       }
       resolve({
@@ -236,6 +272,17 @@ async function runCommand(binPath: string, args: string[], config: Required<Plug
         stderr,
         exitCode,
         signal,
+      });
+    });
+
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      resolve({
+        ok: false,
+        stdout,
+        stderr: `${stderr}\nProcess error: ${error.message}`.trim(),
+        exitCode: 126,
+        signal: null,
       });
     });
   });
@@ -334,8 +381,16 @@ const plugin = {
   description: "Routes website tasks through the local Unbrowse CLI before pixel browser automation.",
   register(api: OpenClawPluginApi) {
     const config = normalizeConfig(api.pluginConfig);
-    const binPath = resolveUnbrowseBin(config);
     const version = getPluginVersion();
+
+    let binPath: string;
+    try {
+      binPath = resolveUnbrowseBin(config);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      api.logger.error(`${PLUGIN_ID}@${version}: failed to resolve unbrowse binary — ${msg}`);
+      return;
+    }
 
     api.logger.info(`${PLUGIN_ID}@${version}: registered (bin: ${binPath})`);
 

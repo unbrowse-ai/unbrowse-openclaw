@@ -113,8 +113,24 @@ PLUGIN_PATH="$(cd "$PLUGIN_PATH" && pwd)"
 [[ -f "$PLUGIN_PATH/package.json" ]] || die "package.json not found under $PLUGIN_PATH"
 [[ -f "$PLUGIN_PATH/openclaw.plugin.json" ]] || die "openclaw.plugin.json not found under $PLUGIN_PATH"
 
-command -v openclaw >/dev/null 2>&1 || die "openclaw CLI not found on PATH"
+command -v openclaw >/dev/null 2>&1 || die "openclaw CLI not found on PATH. Install from https://openclaw.ai"
 command -v node >/dev/null 2>&1 || die "node not found on PATH"
+
+# Validate Node.js version (>=22.12.0)
+NODE_VERSION="$(node -e 'process.stdout.write(process.version.slice(1))')"
+NODE_MAJOR="${NODE_VERSION%%.*}"
+if [[ "$NODE_MAJOR" -lt 22 ]]; then
+  die "Node.js >=22.12.0 required, found v$NODE_VERSION"
+fi
+
+# Validate OpenClaw version (>=2026.3.2)
+OC_VERSION="$(openclaw --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)"
+if [[ -n "$OC_VERSION" ]]; then
+  OC_YEAR="${OC_VERSION%%.*}"
+  if [[ "$OC_YEAR" -lt 2026 ]]; then
+    warn "OpenClaw version $OC_VERSION may be too old (requires >=2026.3.2). Proceeding anyway."
+  fi
+fi
 
 PLUGIN_ID="$(
   node -e '
@@ -335,6 +351,14 @@ NODE
 STATE_DIR="$(resolve_state_dir)"
 EXTENSIONS_DIR="$STATE_DIR/extensions"
 TARGET_PATH="$EXTENSIONS_DIR/$PLUGIN_ID"
+
+# Validate we can write to the state dir
+if [[ -d "$STATE_DIR" ]] && [[ ! -w "$STATE_DIR" ]]; then
+  die "No write permission to $STATE_DIR. Fix permissions or run with appropriate privileges."
+fi
+mkdir -p "$EXTENSIONS_DIR" 2>/dev/null || die "Cannot create $EXTENSIONS_DIR. Check permissions."
+[[ -w "$EXTENSIONS_DIR" ]] || die "No write permission to $EXTENSIONS_DIR."
+
 PLUGIN_VERSION="$(
   node -e '
     const fs = require("node:fs");
