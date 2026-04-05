@@ -50,7 +50,36 @@ const forwarded = args.slice(1);
 const hasInstallMode = forwarded.includes("--copy") || forwarded.includes("--link");
 const installArgs = [installScript, ...(hasInstallMode ? [] : ["--copy"]), ...forwarded];
 
-const result = spawnSync("bash", installArgs, {
+// Find a bash-compatible shell — required for the installer script.
+// On Windows, Git for Windows provides bash at common paths.
+function findShell() {
+  if (process.platform !== "win32") return "bash";
+  const candidates = [
+    "bash",
+    "C:\\Program Files\\Git\\bin\\bash.exe",
+    "C:\\Program Files (x86)\\Git\\bin\\bash.exe",
+  ];
+  for (const shell of candidates) {
+    const check = spawnSync(shell, ["--version"], { stdio: "ignore" });
+    if (check.status === 0) return shell;
+  }
+  return null;
+}
+
+const shell = findShell();
+if (!shell) {
+  process.stderr.write(
+    `Error: bash not found. On Windows, install Git for Windows (https://git-scm.com) which includes bash.\n` +
+    `Alternatively, install manually:\n` +
+    `  1. npm install -g unbrowse-openclaw\n` +
+    `  2. Copy node_modules/unbrowse-openclaw to %USERPROFILE%\\.openclaw\\extensions\\unbrowse-openclaw\n` +
+    `  3. Run: openclaw config set plugins.allow '["unbrowse-openclaw"]' --strict-json\n` +
+    `  4. Run: openclaw config set plugins.entries.unbrowse-openclaw.enabled true --strict-json\n`
+  );
+  process.exit(1);
+}
+
+const result = spawnSync(shell, installArgs, {
   cwd: packageDir,
   stdio: "inherit",
 });
