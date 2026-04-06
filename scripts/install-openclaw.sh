@@ -141,7 +141,7 @@ PLUGIN_ID="$(
 )"
 
 oc() {
-  openclaw "${OPENCLAW_SCOPE[@]}" "$@"
+  openclaw ${OPENCLAW_SCOPE[@]+"${OPENCLAW_SCOPE[@]}"} "$@"
 }
 
 resolve_state_dir() {
@@ -423,10 +423,10 @@ if [[ "$RESTART_GATEWAY" -eq 1 ]]; then
   if oc gateway restart; then
     log "gateway restarted"
   else
-    warn "gateway restart failed; run 'openclaw ${OPENCLAW_SCOPE[*]} gateway restart' manually"
+    warn "gateway restart failed; run 'openclaw ${OPENCLAW_SCOPE[*]+"${OPENCLAW_SCOPE[*]}"} gateway restart' manually"
   fi
 else
-  log "restart not requested; run 'openclaw ${OPENCLAW_SCOPE[*]} gateway restart' after install"
+  log "restart not requested; run 'openclaw ${OPENCLAW_SCOPE[*]+"${OPENCLAW_SCOPE[*]}"} gateway restart' after install"
 fi
 
 printf '\n'
