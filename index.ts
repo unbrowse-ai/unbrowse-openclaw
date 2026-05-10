@@ -4,6 +4,8 @@ import { createRequire } from "node:module";
 import { spawn } from "node:child_process";
 import { accessSync, constants, existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { SdkDriver } from "./src/driver-sdk.ts";
+import type { CommandResult, DriverActionInput } from "./src/driver.ts";
 
 const requireFromHere = createRequire(import.meta.url);
 const PLUGIN_ID = "unbrowse-openclaw";
@@ -21,6 +23,7 @@ type PluginConfig = {
   allowBrowserFallback?: boolean;
   healthcheckOnStart?: boolean;
   logStderr?: boolean;
+  driver?: "sdk" | "cli";
 };
 
 type ToolParams = {
@@ -38,13 +41,6 @@ type ToolParams = {
   dryRun?: boolean;
 };
 
-type CommandResult = {
-  ok: boolean;
-  stdout: string;
-  stderr: string;
-  exitCode: number | null;
-  signal: NodeJS.Signals | null;
-};
 
 type CompatibleRegisterHook = OpenClawPluginApi["registerHook"];
 type CompatibleHookOptions = Parameters<CompatibleRegisterHook>[2];
@@ -78,6 +74,7 @@ function normalizeConfig(raw: unknown): Required<PluginConfig> {
     allowBrowserFallback: cfg.routingMode === "strict" ? false : cfg.allowBrowserFallback !== false,
     healthcheckOnStart: cfg.healthcheckOnStart !== false,
     logStderr: cfg.logStderr === true,
+    driver: cfg.driver === "cli" ? "cli" : "sdk",
   };
 }
 
@@ -194,13 +191,58 @@ function summarizeOutput(stdout: string): string {
   }
 }
 
-function parseMaybeJson(stdout: string): unknown {
-  const trimmed = stdout.trim();
+function parseMaybeJson(text: string): unknown {
+  const trimmed = text.trim();
   if (!trimmed) return null;
   try {
     return JSON.parse(trimmed);
   } catch {
-    return trimmed;
+    return text;
+  }
+}
+
+/**
+ * Convert an OpenClaw `ToolParams` into a typed `DriverActionInput` for the
+ * SDK driver. Always returns a valid input — when fields the SDK ignores are
+ * present (endpointId/path/extract/limit/pretty), the SDK driver detects them
+ * itself and returns exitCode=2 so the caller falls through to the CLI path.
+ */
+function paramsToDriverInput(params: ToolParams): DriverActionInput {
+  switch (params.action) {
+    case "health":
+    case "skills":
+      return { action: params.action };
+    case "skill":
+      return { action: "skill", skillId: params.skillId ?? "" };
+    case "login":
+      return { action: "login", url: params.url ?? "" };
+    case "search":
+      return {
+        action: "search",
+        intent: params.intent ?? "",
+        domain: params.domain,
+        k: params.limit,
+      };
+    case "resolve":
+      return {
+        action: "resolve",
+        intent: params.intent ?? "",
+        url: params.url,
+        confirmUnsafe: params.confirmUnsafe,
+        dryRun: params.dryRun,
+      };
+    case "execute":
+      return {
+        action: "execute",
+        skillId: params.skillId ?? "",
+        endpointId: params.endpointId,
+        path: params.path,
+        extract: params.extract,
+        limit: params.limit,
+        pretty: params.pretty,
+        confirmUnsafe: params.confirmUnsafe,
+        dryRun: params.dryRun,
+      };
   }
 }
 
@@ -371,8 +413,10 @@ export const __test = {
   buildSuggestedConfig,
   buildTrustedInstallGuide,
   normalizeConfig,
+  paramsToDriverInput,
   resolveUnbrowseBin,
   runCommand,
+  SdkDriver,
 };
 
 const plugin = {
@@ -392,7 +436,15 @@ const plugin = {
       return;
     }
 
-    api.logger.info(`${PLUGIN_ID}@${version}: registered (bin: ${binPath})`);
+    api.logger.info(`${PLUGIN_ID}@${version}: registered (driver: ${config.driver}, bin: ${binPath})`);
+
+    const sdkDriver =
+      config.driver === "sdk"
+        ? new SdkDriver({
+            baseUrl: config.baseUrl || undefined,
+            timeoutMs: config.timeoutMs,
+          })
+        : null;
 
     api.registerTool({
       name: TOOL_NAME,
@@ -424,8 +476,27 @@ const plugin = {
       async execute(_toolCallId, rawParams) {
         try {
           const params = rawParams as ToolParams;
-          const args = buildArgs(params);
-          const result = await runCommand(binPath, args, config);
+
+          // SDK path first when configured. SDK driver returns exitCode=2 to
+          // signal a known SDK gap (skills list, execute-with-endpointId, etc.)
+          // — in that case we fall through to the CLI path.
+          let result: CommandResult | null = null;
+          let viaSdk = false;
+          if (sdkDriver) {
+            const sdkInput = paramsToDriverInput(params);
+            const sdkResult = await sdkDriver.call(sdkInput);
+            if (sdkResult.exitCode !== 2) {
+              result = sdkResult;
+              viaSdk = true;
+            }
+          }
+
+          let args: string[] | undefined;
+          if (!result) {
+            args = buildArgs(params);
+            result = await runCommand(binPath, args, config);
+          }
+
           const parsed = parseMaybeJson(result.stdout);
           const stderr = config.logStderr || !result.ok ? result.stderr.trim() : "";
 
@@ -438,7 +509,8 @@ const plugin = {
               details: {
                 ok: false,
                 action: params.action,
-                args,
+                via: viaSdk ? "sdk" : "cli",
+                ...(args ? { args } : {}),
                 exitCode: result.exitCode,
                 signal: result.signal,
                 stdout: parsed,
@@ -455,7 +527,8 @@ const plugin = {
             details: {
               ok: true,
               action: params.action,
-              args,
+              via: viaSdk ? "sdk" : "cli",
+              ...(args ? { args } : {}),
               result: parsed,
               ...(stderr ? { stderr } : {}),
             },
