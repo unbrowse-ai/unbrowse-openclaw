@@ -200,7 +200,7 @@ test("plugin tool executes against an explicit binPath", async () => {
   chmodSync(fakeCliPath, 0o755);
 
   const api = {
-    pluginConfig: { routingMode: "strict", healthcheckOnStart: false, binPath: fakeCliPath },
+    pluginConfig: { routingMode: "strict", healthcheckOnStart: false, binPath: fakeCliPath, driver: "cli" },
     logger: { info() {}, warn() {} },
     registerTool(tool: { execute: (toolCallId: string, params: Record<string, unknown>) => Promise<unknown> }) {
       tools.push(tool);
@@ -221,7 +221,6 @@ test("plugin tool executes against an explicit binPath", async () => {
       services.push(service);
     },
   };
-
   mod.default.register(api as never);
   assert.equal(tools.length, 1);
   assert.equal(hooks.length, 3);

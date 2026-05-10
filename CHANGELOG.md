@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.0
+
+### Migrated to typed `@unbrowse/sdk` for the default call path
+
+- The plugin's `unbrowse` tool now routes through `@unbrowse/sdk` (`SdkDriver`) instead of spawning the `unbrowse` CLI for every action. Default config is `driver: "sdk"`.
+- The legacy CLI path is preserved as a fallback for two known SDK gaps: `action: "skills"` (no `listSkills` on the SDK) and `action: "execute"` with `endpointId` / `path` / `extract` / `limit` / `pretty` (post-processing flags are CLI-only). When the SDK driver detects either case it returns `exitCode=2` and the host falls through to `runCommand` automatically. No agent action required.
+- New `driver: "cli"` config opts back to the v0.7.x behavior for users who hit edge cases. `binPath` keeps working in both modes.
+- Tool result details now include `via: "sdk" | "cli"` so callers can trace which path executed.
+- Hardened `commandResultFromError` against `Symbol`, `null`, `undefined`, plain objects, and empty-message Errors — the coercer used to crash on `String(Symbol)`.
+- New module layout: `src/driver.ts` (interface + helpers), `src/driver-sdk.ts` (typed SDK adapter). Existing `index.ts` keeps the OpenClaw host wiring, prompt builders, and CLI invocation helpers.
+- Test suite extended from 13 → 30 cases — adds parity drift detection between the firmament and the tool surface, type-level exhaustiveness over the action union, SDK driver edge/adversarial cases, and two host-level E2E tests proving SDK-default routing and CLI fallback both work end to end.
+
 ## Unreleased
 
 - fix npm release packaging so published tarballs keep `bin/` + `scripts/`, restoring `npx unbrowse-openclaw install --restart`
