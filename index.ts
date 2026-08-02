@@ -416,6 +416,7 @@ export const __test = {
   paramsToDriverInput,
   resolveUnbrowseBin,
   runCommand,
+  summarizeOutput,
   SdkDriver,
 };
 

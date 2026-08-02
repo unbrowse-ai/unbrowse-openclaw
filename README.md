@@ -110,9 +110,11 @@ openclaw config unset tools.profile
 ## Why install scanners warn
 
 - `node:child_process` because the plugin retains a fallback CLI launcher for two SDK gaps (`skills` listing and `execute` with `--endpointId`/`--extract`/`--path`/`--limit`/`--pretty`) and for explicit `driver: "cli"` opt-out
-- `process.env` because the CLI fallback passes local config like `UNBROWSE_URL` into that child process
+- `process.env` because the CLI fallback inherits the OpenClaw process environment. This is required for the local CLI to see its normal `HOME`, proxy, Unbrowse, and explicitly configured authentication-provider variables. The plugin does not enumerate or upload environment variables itself; the trusted local `unbrowse` child decides which configured credentials a requested action needs.
 - local file reads because it loads bundled prompt, skill, and config files from its own directory
 - install/load does not contact external websites; network traffic starts only after an agent explicitly calls `unbrowse`. By default this happens via `@unbrowse/sdk` (HTTP fetch) — set `driver: "cli"` in the plugin config to route through the bundled `unbrowse` binary instead
+
+See [SECURITY.md](./SECURITY.md) for the complete privilege and network boundary.
 
 ## Driver selection
 
@@ -147,6 +149,12 @@ Actions:
 - `skills`
 - `skill`
 - `health`
+
+Legacy `unbrowse_workflow_record` and `unbrowse_workflow_learn` tools from the
+pre-0.8 plugin are not part of this surface. In particular, an empty recorder
+log can no longer reach the old learner's string-template `.replace` path: the
+current schema rejects those action names as unsupported. Capture or learn a
+route with the current Unbrowse CLI first, then use `resolve`/`execute` here.
 
 Integration hooks:
 
