@@ -65,6 +65,7 @@
     "index.ts",
     "openclaw.plugin.json",
     "README.md",
+    "SECURITY.md",
     "CHANGELOG.md",
     "LICENSE",
     "bin",

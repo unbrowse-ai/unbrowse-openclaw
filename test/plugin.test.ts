@@ -94,6 +94,26 @@ test("trusted install guide explains the local-load path", async () => {
   assert.match(guide, /allow: \["unbrowse-openclaw"\]/);
 });
 
+test("legacy workflow actions fail closed before an empty log can reach a learner", async () => {
+  const mod = await import("../index.ts");
+
+  assert.throws(
+    () => mod.__test.buildArgs({ action: "workflow_learn" } as never),
+    /Unsupported action: workflow_learn/,
+  );
+  assert.equal(mod.__test.summarizeOutput(""), "Unbrowse finished with no stdout.");
+});
+
+test("security disclosure names the actual process, environment, and network boundaries", () => {
+  const security = readFileSync(new URL("../SECURITY.md", import.meta.url), "utf8");
+
+  assert.match(security, /node:child_process/);
+  assert.match(security, /does not invoke a shell/i);
+  assert.match(security, /inherits OpenClaw's environment/);
+  assert.match(security, /healthcheckOnStart: false/);
+  assert.match(security, /workflow_record/);
+});
+
 test("plugin manifest ships the browser-routing skill", () => {
   const manifest = JSON.parse(
     readFileSync(new URL("../openclaw.plugin.json", import.meta.url), "utf8"),
@@ -139,6 +159,7 @@ test("npm pack tarball keeps the installer entrypoints and runtime deps", () => 
     assert.ok(tarball);
     assert.ok(tarball.files.some((entry) => entry.path === "bin/unbrowse-openclaw.mjs"));
     assert.ok(tarball.files.some((entry) => entry.path === "scripts/install-openclaw.sh"));
+    assert.ok(tarball.files.some((entry) => entry.path === "SECURITY.md"));
 
     const unpack = spawnSync("tar", ["-xzf", join(packDir, tarball.filename), "-C", extractDir], {
       encoding: "utf8",
