@@ -2,12 +2,12 @@
 
 Use Unbrowse as the default web path inside OpenClaw.
 
-This plugin:
-
-- adds a native `unbrowse` tool
+- adds a native `unbrowse` tool, backed by the typed `@unbrowse/sdk` HTTP client
 - teaches agents to prefer it for website tasks
 - can block the built-in `browser` tool in strict mode
 - installs cleanly from npm with one command
+- bundles the SDK into the published tarball, so install needs no separate dep resolution
+- preserves the legacy CLI path as an automatic fallback for SDK gaps and as an opt-in via `driver: "cli"`
 
 ## Install
 
@@ -109,11 +109,23 @@ openclaw config unset tools.profile
 
 ## Why install scanners warn
 
-- `node:child_process` because the plugin launches the local `unbrowse` CLI
-- `process.env` because it passes local config like `UNBROWSE_URL` into that child process
+- `node:child_process` because the plugin retains a fallback CLI launcher for two SDK gaps (`skills` listing and `execute` with `--endpointId`/`--extract`/`--path`/`--limit`/`--pretty`) and for explicit `driver: "cli"` opt-out
+- `process.env` because the CLI fallback passes local config like `UNBROWSE_URL` into that child process
 - local file reads because it loads bundled prompt, skill, and config files from its own directory
-- install/load does not contact external websites; network traffic starts only after an agent explicitly calls `unbrowse`
+- install/load does not contact external websites; network traffic starts only after an agent explicitly calls `unbrowse`. By default this happens via `@unbrowse/sdk` (HTTP fetch) — set `driver: "cli"` in the plugin config to route through the bundled `unbrowse` binary instead
 
+## Driver selection
+
+| `driver` config | Behavior |
+|---|---|
+| `"sdk"` (default) | Calls the typed `@unbrowse/sdk` client (HTTP). Falls through to the CLI driver automatically when the requested action is one of two known SDK gaps. |
+| `"cli"` | Opts out of SDK; every action spawns the bundled `unbrowse` binary. Matches v0.7.x behavior. |
+
+The two SDK gaps that auto-fallback to CLI:
+- `action: "skills"` — listing skills (no `listSkills` method on the SDK client)
+- `action: "execute"` with any of `endpointId`, `path`, `extract`, `limit`, `pretty` — those flags are CLI-only post-processors
+
+Tool results include `details.via: "sdk" | "cli"` so callers can trace which path executed.
 ## Tool surface
 
 Tool action shape:
